@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AYAAN EXPENSE CALCULATOR</title>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+  :root{
+    --bg:#f4f6f8; --card:#fff; --text:#111; --muted:rgba(0,0,0,0.6); --accent:#0b6efd;
+  }
+  [data-theme="dark"]{
+    --bg:#07101a; --card:#071822; --text:#e6eef9; --muted:rgba(255,255,255,0.65);
+  }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter,Arial,sans-serif;}
+  .app{max-width:980px;margin:14px auto;padding:12px;position:relative;}
+  .watermark{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:48px;color:rgba(0,0,0,0.04);pointer-events:none;user-select:none;z-index:0}
+  [data-theme="dark"] .watermark{color:rgba(255,255,255,0.03)}
+  .card{background:var(--card);border-radius:10px;padding:12px;box-shadow:0 6px 18px rgba(2,6,23,0.06);margin-bottom:12px;position:relative;z-index:1}
+  h1{margin:0 0 6px 0;font-size:20px}
+  label{display:block;font-size:13px;color:var(--muted);margin-top:8px}
+  input[type="text"], input[type="number"], input[type="date"], select, textarea {width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;margin-top:6px;box-sizing:border-box;background:transparent;color:var(--text)}
+  .row{display:flex;gap:8px}
+  .row > *{flex:1}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  button{padding:8px 12px;border:0;border-radius:8px;background:var(--accent);color:white;cursor:pointer}
+  .muted{color:var(--muted);font-size:13px}
+  .small{font-size:13px}
+  .chip{padding:6px 10px;border-radius:20px;background:#eee;cursor:pointer}
+  .chip.active{background:var(--accent);color:#fff}
+  .list{max-height:320px;overflow:auto;margin-top:12px;border-top:1px solid #eee}
+  .item{padding:10px;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;gap:8px;align-items:center}
+  .muted-small{font-size:12px;color:var(--muted)}
+  .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  @media(max-width:820px){ .row{flex-direction:column} .settings-grid{grid-template-columns:1fr} }
+  .danger{background:#e53e3e}
+  input[type="color"]{height:40px;width:56px;padding:0;border-radius:6px}
+  .topbar{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+  .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+  /* Lock overlay */
+  #lockOverlay{position:fixed;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;display:none}
+  #lockOverlay .box{background:white;padding:20px;border-radius:8px;max-width:320px;width:90%}
+  [data-theme="dark"] #lockOverlay .box{background:#071822;color:var(--text)}
+  .small-link{background:none;border:none;color:var(--accent);cursor:pointer;text-decoration:underline;padding:0}
+</style>
+</head>
+<body data-theme="light">
+<div class="app" id="app">
+  <div class="watermark" id="watermark">AYAAN EXPENSE CALCULATOR</div>
+
+  <div class="topbar">
+    <h1>AYAAN EXPENSE CALCULATOR</h1>
+    <div class="right">
+      <select id="currency" title="Currency">
+        <option value="₹">₹ INR</option>
+        <option value="$">$ USD</option>
+        <option value="€">€ EUR</option>
+        <option value="£">£ GBP</option>
+      </select>
+      <button id="themeBtn">Toggle Theme</button>
+      <button id="settingsBtn">Settings</button>
+      <button id="helpBtn">Help</button>
+    </div>
+  </div>
+
+  <!-- Input card -->
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>Amount</label>
+        <input id="amount" type="number" placeholder="Amount" />
+      </div>
+      <div>
+        <label>Currency (inline)</label>
+        <select id="currencyInline">
+          <option>₹</option><option>$</option><option>€</option><option>£</option>
+        </select>
+      </div>
+    </div>
+
+    <label>Category (choose or type)</label>
+    <div class="row">
+      <select id="categorySelect">
+        <option>Food</option><option>Travel</option><option>Bills</option><option>Shopping</option><option>Groceries</option><option>Others</option>
+      </select>
+      <input id="categoryFree" type="text" placeholder="Or type category"/>
+    </div>
+
+    <label>Notes</label>
+    <input id="notes" type="text" placeholder="Optional notes">
+
+    <div class="row">
+      <div>
+        <label>Date (leave blank = today)</label>
+        <input id="date" type="date" />
+      </div>
+      <div>
+        <label>Recurring</label>
+        <select id="recurring"><option value="0">No</option><option value="monthly">Monthly</option></select>
+      </div>
+      <div>
+        <label>Tags (comma separated)</label>
+        <input id="tags" type="text" placeholder="#food,#work" />
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+      <button id="addBtn">Add Expense</button>
+      <button id="clearForm" style="background:#6b7280">Clear</button>
+      <div style="margin-left:auto" class="muted-small">Stored locally (offline)</div>
+    </div>
+  </div>
+
+  <!-- Controls & summary -->
+  <div class="card">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div id="periods" style="display:flex;gap:6px;flex-wrap:wrap">
+        <div class="chip active" data-period="daily">Daily</div>
+        <div class="chip" data-period="weekly">Weekly</div>
+        <div class="chip" data-period="monthly">Monthly</div>
+        <div class="chip" data-period="yearly">Yearly</div>
+        <div class="chip" data-period="all">All</div>
+        <div class="chip" data-period="custom">Custom</div>
+      </div>
+
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <label class="muted-small">From</label><input id="from" type="date" style="width:150px">
+        <label class="muted-small">To</label><input id="to" type="date" style="width:150px">
+        <button id="applyRange">Apply</button>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap">
+      <div style="flex:1">
+        <div id="summary" class="muted-small">Total: ₹0.00 • Items: 0</div>
+      </div>
+      <div class="controls">
+        <button id="exportCsv">Export CSV</button>
+        <button id="exportJson">Export JSON</button>
+        <button id="importJson">Import JSON</button>
+        <button id="shareBtn">Share</button>
+        <button id="deleteAll" class="danger">Delete All</button>
+      </div>
+    </div>
+
+    <canvas id="pieChart" style="max-height:240px;margin-top:12px"></canvas>
+    <div class="list" id="list"></div>
+  </div>
+
+  <!-- Settings modal -->
+  <div class="card" id="settings" style="display:none">
+    <h3>Settings</h3>
+    <div class="settings-grid">
+      <div>
+        <label>Background color</label>
+        <input id="bgColor" type="color" />
+      </div>
+      <div>
+        <label>Watermark text</label>
+        <input id="watermarkText" type="text" />
+      </div>
+      <div>
+        <label>Theme</label>
+        <select id="themeSelect"><option value="light">Light</option><option value="dark">Dark</option></select>
+      </div>
+      <div>
+        <label>Set PIN (4+ chars)</label>
+        <input id="pinInput" type="text" maxlength="10" placeholder="Set or clear PIN">
+        <button id="setPinBtn" style="margin-top:6px">Save PIN</button>
+      </div>
+      <div>
+        <label>Default currency</label>
+        <select id="currencySetting"><option>₹</option><option>$</option><option>€</option><option>£</option></select>
+      </div>
+      <div>
+        <label>Help & Privacy</label>
+        <button id="openHelp">Open</button>
+      </div>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px">
+      <button id="closeSettings">Close</button>
+      <button id="resetApp" class="danger">Reset All Data</button>
+    </div>
+    <div style="margin-top:8px" class="muted-small">Data stored locally. Sharing only occurs when you press Share/Export.</div>
+  </div>
+
+  <!-- Help modal -->
+  <div class="card" id="help" style="display:none">
+    <h3>Help & Privacy</h3>
+    <p class="muted-small">This app stores all data on your device in your browser's localStorage. It works offline. Export/Share actions are explicit — nothing is sent without your action. If you set a PIN, it is stored locally (not encrypted here). For sensitive deployments use secure server + authentication.</p>
+    <button id="closeHelp">Close</button>
+  </div>
+
+</div>
+
+<!-- PIN lock overlay -->
+<div id="lockOverlay">
+  <div class="box">
+    <h3>Enter PIN to unlock</h3>
+    <input id="unlockPin" type="password" placeholder="PIN" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ccc"/>
+    <div style="margin-top:10px;display:flex;gap:8px">
+      <button id="unlockBtn">Unlock</button>
+      <button id="unlockCancel" class="small-link">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- Storage keys & state ---------- */
+const EXP_KEY = 'ayaan_expenses_v3';
+const SET_KEY = 'ayaan_settings_v3';
+
+let state = {
+  expenses: [],
+  settings: {
+    theme:'light',
+    bgColor:'#f4f6f8',
+    watermark:'AYAAN EXPENSE CALCULATOR',
+    pin:'',
+    currency:'₹'
+  }
+};
+
+/* ---------- Load / Save ---------- */
+function loadAll(){
+  try{ state.expenses = JSON.parse(localStorage.getItem(EXP_KEY)) || []; }catch(e){ state.expenses = []; }
+  try{ const s = JSON.parse(localStorage.getItem(SET_KEY)); if(s) state.settings = Object.assign(state.settings, s); }catch(e){}
+}
+function saveAll(){ localStorage.setItem(EXP_KEY, JSON.stringify(state.expenses)); localStorage.setItem(SET_KEY, JSON.stringify(state.settings)); }
+
+/* ---------- Init ---------- */
+loadAll();
+document.addEventListener('DOMContentLoaded', init);
+
+let chart;
+
+function init(){
+  // element refs
+  const watermark = document.getElementById('watermark');
+  const bgColor = document.getElementById('bgColor');
+  const watermarkText = document.getElementById('watermarkText');
+  const themeSelect = document.getElementById('themeSelect');
+  const currency = document.getElementById('currency');
+
+  // apply settings
+  document.body.style.background = state.settings.bgColor;
+  watermark.textContent = state.settings.watermark;
+  bgColor.value = state.settings.bgColor || '#f4f6f8';
+  watermarkText.value = state.settings.watermark;
+  themeSelect.value = state.settings.theme;
+  document.body.setAttribute('data-theme', state.settings.theme);
+  currency.value = state.settings.currency || '₹';
+  document.getElementById('currencyInline').value = state.settings.currency;
+
+  // date default
+  if(!document.getElementById('date').value) document.getElementById('date').value = new Date().toISOString().slice(0,10);
+
+  // wire buttons
+  document.getElementById('addBtn').addEventListener('click', addExpense);
+  document.getElementById('clearForm').addEventListener('click', clearForm);
+  document.getElementById('periods').addEventListener('click', onPeriodClick);
+  document.getElementById('applyRange').addEventListener('click', render);
+  document.getElementById('exportCsv').addEventListener('click', exportCSV);
+  document.getElementById('exportJson').addEventListener('click', exportJSON);
+  document.getElementById('importJson').addEventListener('click', importJSON);
+  document.getElementById('shareBtn').addEventListener('click', shareExplicit);
+  document.getElementById('deleteAll').addEventListener('click', deleteAll);
+  document.getElementById('settingsBtn').addEventListener('click', ()=>toggleSettings(true));
+  document.getElementById('closeSettings').addEventListener('click', ()=>toggleSettings(false));
+  document.getElementById('helpBtn').addEventListener('click', ()=>toggleHelp(true));
+  document.getElementById('closeHelp').addEventListener('click', ()=>toggleHelp(false));
+  document.getElementById('setPinBtn').addEventListener('click', setPin);
+  document.getElementById('themeBtn').addEventListener('click', toggleTheme);
+  document.getElementById('bgColor').addEventListener('change', onBgChange);
+  document.getElementById('watermarkText').addEventListener('input', e=>{ watermark.textContent = e.target.value; state.settings.watermark = e.target.value; saveAll(); });
+  document.getElementById('currencySetting').addEventListener('change', e=>{ state.settings.currency = e.target.value; document.getElementById('currency').value = e.target.value; document.getElementById('currencyInline').value = e.target.value; saveAll(); });
+  document.getElementById('resetApp').addEventListener('click', resetApp);
+  document.getElementById('openHelp').addEventListener('click', ()=>toggleHelp(true));
+
+  // load PIN overlay if set
+  if(state.settings.pin){
+    showLock();
+  }
+
+  // init chart
+  initChart();
+  render();
+}
+
+/* ---------- Add / Edit / Remove ---------- */
+function addExpense(){
+  const amt = parseFloat(document.getElementById('amount').value);
+  if(isNaN(amt) || amt <= 0){ alert('Enter valid amount'); return; }
+  const cat = (document.getElementById('categoryFree').value || document.getElementById('categorySelect').value).trim();
+  const notes = document.getElementById('notes').value.trim();
+  const date = document.getElementById('date').value || new Date().toISOString().slice(0,10);
+  const recurring = document.getElementById('recurring').value;
+  const tags = document.getElementById('tags').value.split(',').map(t=>t.trim()).filter(Boolean);
+  const cur = document.getElementById('currencyInline').value || state.settings.currency;
+
+  const item = { id: Date.now(), amount: amt, category: cat || 'Others', notes, date, recurring, tags, currency: cur };
+  state.expenses.unshift(item);
+  saveAll();
+  clearForm();
+  render();
+}
+
+function clearForm(){
+  document.getElementById('amount').value=''; document.getElementById('notes').value=''; document.getElementById('categoryFree').value=''; document.getElementById('tags').value=''; document.getElementById('recurring').value='0';
+  document.getElementById('date').value = new Date().toISOString().slice(0,10);
+}
+
+/* ---------- Filtering & Render ---------- */
+let activePeriod = 'daily';
+function onPeriodClick(e){
+  const chip = e.target.closest('.chip');
+  if(!chip) return;
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+  chip.classList.add('active');
+  activePeriod = chip.dataset.period;
+  render();
+}
+function dateRangeForPeriod(period){
+  const now = new Date();
+  let from,to;
+  if(period==='daily'){ from = new Date(now.getFullYear(),now.getMonth(),now.getDate()); to = new Date(from); to.setHours(23,59,59,999); }
+  else if(period==='weekly'){ const day = now.getDay()||7; from = new Date(now); from.setDate(now.getDate()-day+1); from.setHours(0,0,0,0); to = new Date(from); to.setDate(from.getDate()+6); to.setHours(23,59,59,999); }
+  else if(period==='monthly'){ from = new Date(now.getFullYear(),now.getMonth(),1); to = new Date(now.getFullYear(),now.getMonth()+1,0); to.setHours(23,59,59,999); }
+  else if(period==='yearly'){ from = new Date(now.getFullYear(),0,1); to = new Date(now.getFullYear(),11,31); to.setHours(23,59,59,999); }
+  else { from = new Date(2000,0,1); to = new Date(2100,0,1); }
+  return {from,to};
+}
+
+function render(){
+  let arr = state.expenses.slice();
+  // filter by period
+  if(activePeriod!=='all' && activePeriod!=='custom'){
+    const r = dateRangeForPeriod(activePeriod);
+    arr = arr.filter(i => { const d = new Date(i.date+'T00:00:00'); return d>=r.from && d<=r.to; });
+  }
+  // custom range
+  const fromVal = document.getElementById('from').value, toVal = document.getElementById('to').value;
+  if(fromVal && toVal){
+    const f = new Date(fromVal); f.setHours(0,0,0,0);
+    const t = new Date(toVal); t.setHours(23,59,59,999);
+    arr = arr.filter(i => { const d = new Date(i.date+'T00:00:00'); return d>=f && d<=t; });
+  }
+
+  // summary
+  const total = arr.reduce((s,i)=> s + (parseFloat(i.amount)||0), 0);
+  document.getElementById('summary').textContent = `Total: ${state.settings.currency || '₹'}${total.toFixed(2)} • Items: ${arr.length}`;
+
+  // list UI
+  const list = document.getElementById('list'); list.innerHTML = '';
+  if(arr.length===0) list.innerHTML = '<div class="muted-small" style="padding:12px">No expenses for selected range.</div>';
+  arr.forEach(it=>{
+    const d = document.createElement('div'); d.className='item';
+    d.innerHTML = `<div>
+      <strong>${it.category}</strong> <span class="muted-small">• ${it.tags?it.tags.join(', '):''}</span>
+      <div class="muted-small">${it.notes||''}</div>
+    </div>
+    <div style="text-align:right">
+      <div><strong>${it.currency||state.settings.currency}${parseFloat(it.amount).toFixed(2)}</strong></div>
+      <div class="muted-small">${new Date(it.date).toLocaleDateString()}</div>
+      <div style="margin-top:6px">
+        <button onclick="editExpense(${it.id})">Edit</button>
+        <button onclick="removeExpense(${it.id})" style="background:#ef4444">Delete</button>
+      </div>
+    </div>`;
+    list.appendChild(d);
+  });
+
+  updateChart(arr);
+}
+
+/* ---------- Edit / Remove ---------- */
+function removeExpense(id){ if(!confirm('Delete this expense?')) return; state.expenses = state.expenses.filter(e=>e.id!==id); saveAll(); render(); }
+function editExpense(id){
+  const e = state.expenses.find(x=>x.id===id); if(!e) return;
+  document.getElementById('amount').value = e.amount;
+  document.getElementById('categoryFree').value = e.category;
+  document.getElementById('notes').value = e.notes;
+  document.getElementById('tags').value = (e.tags||[]).join(',');
+  document.getElementById('date').value = e.date;
+  document.getElementById('recurring').value = e.recurring || '0';
+  // remove original (simple edit flow)
+  state.expenses = state.expenses.filter(x=>x.id!==id); saveAll(); render();
+}
+
+/* ---------- Export / Import / Share ---------- */
+function exportCSV(){
+  const arr = state.expenses;
+  if(arr.length===0){ alert('No data to export'); return; }
+  const rows = [['id','amount','currency','category','notes','date','recurring','tags']];
+  arr.forEach(r=> rows.push([r.id, r.amount, (r.currency||state.settings.currency), `"${(r.category||'').replace(/"/g,'""')}"`, `"${(r.notes||'').replace(/"/g,'""')}"`, r.date, r.recurring||'', `"${(r.tags||[]).join(';')}"`]));
+  const csv = rows.map(r=> r.join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`ayaan_expenses_${Date.now()}.csv`; a.click(); URL.revokeObjectURL(url);
+}
+function exportJSON(){ const data={exportedAt:new Date().toISOString(),settings:state.settings,expenses:state.expenses}; const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`ayaan_backup_${Date.now()}.json`; a.click(); URL.revokeObjectURL(url); }
+function importJSON(){ const input=document.createElement('input'); input.type='file'; input.accept='.json,application/json'; input.onchange=(e)=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=(ev)=>{ try{ const obj=JSON.parse(ev.target.result); if(obj.expenses && Array.isArray(obj.expenses)){ state.expenses = obj.expenses.concat(state.expenses); if(obj.settings) state.settings = Object.assign(state.settings, obj.settings); saveAll(); render(); alert('Import successful'); } else alert('Invalid backup'); }catch(err){ alert('Parse error'); } }; r.readAsText(f); }; input.click(); }
+async function shareExplicit(){
+  const arr = state.expenses.slice(0,200);
+  if(arr.length===0){ alert('No data to share'); return; }
+  let text = `AYAAN Expense Report\nTotal items: ${arr.length}\n\n`;
+  arr.forEach(i=> text += `${i.date} | ${i.category} | ${i.currency||state.settings.currency}${parseFloat(i.amount).toFixed(2)} | ${i.notes}\n`);
+  if(navigator.share){ try{ await navigator.share({ title:'AYAAN Expense Report', text }); return; }catch(e){} }
+  const url = 'https://wa.me/?text=' + encodeURIComponent(text); window.open(url,'_blank');
+}
+
+/* ---------- PIN Lock ---------- */
+function setPin(){
+  const p = document.getElementById('pinInput').value.trim();
+  if(!p){ state.settings.pin=''; saveAll(); alert('PIN cleared'); return; }
+  if(p.length<4){ alert('PIN must be at least 4 chars'); return; }
+  state.settings.pin = p; saveAll(); alert('PIN saved'); toggleSettings(false);
+}
+function showLock(){ document.getElementById('lockOverlay').style.display='flex'; }
+function hideLock(){ document.getElementById('lockOverlay').style.display='none'; }
+document.getElementById('unlockBtn').addEventListener('click', ()=>{
+  const v = document.getElementById('unlockPin').value;
+  if(v === state.settings.pin){ hideLock(); document.getElementById('unlockPin').value=''; } else alert('Wrong PIN');
+});
+document.getElementById('unlockCancel').addEventListener('click', ()=>{ hideLock(); });
+
+/* ---------- Background, Theme, Settings ---------- */
+function toggleSettings(show){ document.getElementById('settings').style.display = show ? 'block' : 'none'; }
+function toggleHelp(show){ document.getElementById('help').style.display = show ? 'block' : 'none'; }
+function toggleTheme(){ const cur = document.body.getAttribute('data-theme')||'light'; const next = cur==='light'?'dark':'light'; document.body.setAttribute('data-theme', next); state.settings.theme=next; saveAll(); }
+function onBgChange(e){ document.body.style.background = e.target.value; state.settings.bgColor = e.target.value; saveAll(); }
+document.getElementById('setPinBtn').addEventListener('click', setPin);
+document.getElementById('themeSelect').addEventListener('change',(e)=>{ document.body.setAttribute('data-theme', e.target.value); state.settings.theme = e.target.value; saveAll(); });
+document.getElementById('bgColor').addEventListener('change', onBgChange);
+document.getElementById('watermarkText').addEventListener('input', e=>{ document.getElementById('watermark').textContent = e.target.value; state.settings.watermark=e.target.value; saveAll(); });
+
+/* ---------- Reset / Delete ---------- */
+function deleteAll(){ if(!confirm('Delete all local expenses?')) return; state.expenses=[]; saveAll(); render(); }
+function resetApp(){ if(!confirm('Reset all data & settings?')) return; localStorage.removeItem(EXP_KEY); localStorage.removeItem(SET_KEY); state.expenses=[]; state.settings={theme:'light',bgColor:'#f4f6f8',watermark:'AYAAN EXPENSE CALCULATOR',pin:'',currency:'₹'}; saveAll(); location.reload(); }
+
+/* ---------- Chart ---------- */
+function initChart(){ const ctx=document.getElementById('pieChart').getContext('2d'); chart=new Chart(ctx,{type:'pie',data:{labels:[],datasets:[{data:[],backgroundColor:[]}]},options:{responsive:true,plugins:{legend:{position:'bottom'}}}}); }
+function updateChart(filtered){
+  const map={};
+  filtered.forEach(i=> map[i.category] = (map[i.category]||0) + parseFloat(i.amount||0));
+  const labels = Object.keys(map); const data = Object.values(map);
+  const colors = labels.map((_,i)=>`hsl(${(i*60)%360} 70% 50%)`);
+  chart.data.labels = labels; chart.data.datasets[0].data = data; chart.data.datasets[0].backgroundColor = colors; chart.update();
+}
+
+/* ---------- Misc ---------- */
+function initChartAndRenderOnLoad(){ initChart(); render(); }
+window.addEventListener('load', ()=>{
+  // apply persisted visual settings
+  document.body.setAttribute('data-theme', state.settings.theme || 'light');
+  document.body.style.background = state.settings.bgColor || '#f4f6f8';
+  document.getElementById('watermark').textContent = state.settings.watermark || 'AYAAN EXPENSE CALCULATOR';
+  document.getElementById('currencySetting').value = state.settings.currency || '₹';
+  document.getElementById('currency').value = state.settings.currency || '₹';
+  document.getElementById('currencyInline').value = state.settings.currency || '₹';
+  if(state.settings.pin) showLock();
+  initChartAndRenderOnLoad();
+});
+// Listen for settings currency change
+document.getElementById('currency').addEventListener('change', e=>{ state.settings.currency = e.target.value; document.getElementById('currencyInline').value = e.target.value; saveAll(); render(); });
+
+</script>
+</body>
+</html>
